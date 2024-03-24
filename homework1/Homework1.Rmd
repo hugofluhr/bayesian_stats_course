@@ -1,0 +1,218 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+# Load required packages
+library(rethinking)
+library(ggplot2)
+library(dagitty)
+```
+# Problem 1
+### DAG
+```{r}
+dag1 <- dagitty('dag {
+    E [pos="0,1"]
+    WL [pos="1,1"]
+    CI [pos="1,0"]
+    M [pos="0,0"]
+    E -> WL
+    E->CI->WL
+    E<-M->CI
+}')
+plot(dag1)
+```
+### Identifying the variables to control for to estimate the direct effect of E on WL
+```{r}
+adjustmentSets(dag1, exposure='E', outcome='WL', effect = 'total')
+```
+We need to adjust for CI to estimate the direct effect of E on WL. An incorrect model would be to adjust for M instead, this would give the total effect of E on WL.
+
+### Simulation
+```{r}
+# Function to simulate data and fit models
+f1 <- function(n=100, bM_E=1, bM_CI=1, bE_CI=1, bCI_WL=1, bE_WL=1) {
+  # Simulate data
+  M <- rnorm(n)  # Motivation
+  u <- rnorm(n)  # Random noise
+  E <- rnorm(n, bM_E*M + u) # Regular Exercise
+  CI <- rnorm(n, bM_CI*M + bE_CI*E + u) # Caloric Intake
+  WL <- rnorm(n, bE_WL*E + bCI_WL*CI + u) # Weight loss
+  
+  # Fit models
+  b_direct <- coef(lm(WL ~ E + CI))['E']  # Model controlling for CI, direct effect
+  b_incorrect <- coef(lm(WL ~ E + M))['E']  # Model controlling for M, total effect
+  
+  return(c(b_direct, b_incorrect))  # Return coefficients
+}
+# Perform Monte Carlo simulation
+sim1 <- mcreplicate(1e4, f1(), mc.cores = 8)
+```
+### Plotting the correct and incorrect versions of the estimate
+```{r}
+# Plot posterior distributions
+range1 <- range(sim1[1,])
+range2 <- range(sim1[2,])
+xlim <- range(c(range1, range2))
+ylim <- c(0,3.)
+
+dens(sim1[1,], lwd=3, xlab='Coefficient of Exercise (Direct Effect)', xlim=xlim, ylim=ylim)
+dens(sim1[2,], lwd=3, col=2, add=TRUE, xlim=xlim, ylim=ylim)
+```
+# Problem 2: Education Level and Job Satisfaction
+### DAG
+```{r}
+dag2 <- dagitty('dag {
+    EL [pos="0,1"]
+    JS [pos="1,1"]
+    F [pos="1,0"]
+    PE [pos="0,0"]
+    EL -> JS
+    EL -> F -> JS
+    EL <- PE -> JS
+}')
+plot(dag2)
+```
+### Identifying the variables to control for to estimate the total effect of EL on JS
+```{r}
+adjustmentSets(dag2, exposure='EL', outcome='JS', effect = 'total')
+```
+We need to adjust for both PE to estimate the total effect of EL on JS.
+
+### Simulation
+```{r}
+# Function to simulate data and fit models
+f2 <- function(n=100, bPE_EL=1, bPE_JS=1, bEL_F=1, bF_JS=1, bEL_JS=1) {
+  # Simulate data
+  PE <- rnorm(n)  # Motivation
+  u <- rnorm(n)  # Random noise
+  EL <- rnorm(n, bPE_EL*PE + u) # Regular Exercise
+  F <- rnorm(n, bEL_F*EL + u) # Caloric Intake
+  JS <- rnorm(n, bF_JS*F + bEL_JS*EL + u) # Weight loss
+  
+  # Fit models
+  b_total <- coef(lm(JS ~ EL + PE))['EL']  # Model controlling for F and PE
+  b_incorrect <- coef(lm(JS ~ EL))['EL']  # Model controlling for F only
+  
+  return(c(b_total, b_incorrect))  # Return coefficients
+}
+# Perform Monte Carlo simulation
+sim2 <- mcreplicate(1e4, f2(), mc.cores = 8)
+```
+### Plotting the correct and incorrect versions of the estimate
+```{r}
+# Plot posterior distributions
+range1 <- range(sim2[1,])
+range2 <- range(sim2[2,])
+xlim <- range(c(range1, range2))
+ylim <- c(0,3.2)
+
+dens(sim2[1,], lwd=3, xlab='Coefficient of Education Level (Total Effect)', xlim=xlim, ylim=ylim)
+dens(sim2[2,], lwd=3, col=2, add=TRUE, xlim=xlim, ylim=ylim)
+```
+
+# Problem 3: Medication Use and Patient Recovery Rate
+### DAG
+```{r}
+dag3 <- dagitty('dag {
+    M [pos="0,1"]
+    RR [pos="1,1"]
+    SI [pos="1,0"]
+    A [pos="0,0"]
+    M -> RR
+    M <- SI -> RR
+    SI <- A -> RR
+}')
+plot(dag3)
+```
+### Identifying the variables to control for to estimate the direct effect of M on RR
+```{r}
+adjustmentSets(dag3, exposure='M', outcome='RR', effect = 'direct')
+```
+We need to adjust for SI to estimate the direct effect of M on RR
+
+### Simulation
+```{r}
+# Function to simulate data and fit models
+f3 <- function(n=100, bA_SI=1, bA_RR=1, bSI_M=1, bSI_RR=1, bM_RR=1.5) {
+  # Simulate data
+  A <- rnorm(n)  # Age
+  u <- rnorm(n)  # Random noise
+  SI <- rnorm(n, bA_SI*A + u)
+  M <- rnorm(n, bSI_M + u)
+  RR <- rnorm(n, bA_RR*A + bSI_RR*SI + bM_RR*M + u)
+  
+  # Fit models
+  b_direct <- coef(lm(RR ~ M + SI))['M']  # Model controlling for SI
+  b_incorrect <- coef(lm(RR ~ M))['M']  # Model not controlling for SI
+  
+  return(c(b_direct, b_incorrect))  # Return coefficients
+}
+# Perform Monte Carlo simulation
+sim3 <- mcreplicate(1e4, f3(), mc.cores = 8)
+```
+### Plotting the correct and incorrect versions of the estimate
+```{r}
+# Plot posterior distributions
+range1 <- range(sim3[1,])
+range2 <- range(sim3[2,])
+xlim <- range(c(range1, range2))
+ylim <- c(0,4.3)
+
+dens(sim3[1,], lwd=3, xlab='Coefficient of Medication (Direct Effect)', xlim=xlim, ylim=ylim)
+dens(sim3[2,], lwd=3, col=2, add=TRUE, xlim=xlim, ylim=ylim)
+```
+
+# Problem 4: Advertising and Sales
+### DAG
+```{r}
+dag4 <- dagitty('dag {
+    A [pos="0,1"]
+    S [pos="1,1"]
+    EC [pos="1,0"]
+    B [pos="0,0"]
+    Q [pos="0.5,0.5"]
+    A -> S
+    B -> A
+    B <- EC -> S
+    S <- Q -> B
+}')
+plot(dag4)
+```
+### Identifying the variables to control for to estimate the total effect of EL on JS
+```{r}
+adjustmentSets(dag4, exposure='A', outcome='S', effect = 'total')
+```
+We need to either adjust for both EC and Q or adjust for B to estimate the total effect of advertising on sales.
+
+# Problem 5
+### DAG
+```{r}
+dag5 <- dagitty('dag {
+    SM [pos="0,1"]
+    MH [pos="1,1"]
+    OSN [pos="1,0"]
+    PI [pos="0,0"]
+    SM -> MH
+    SM <- OSN -> MH
+    PI -> SM
+}')
+plot(dag5)
+```
+OSN is a fork
+
+# Problem 6
+### DAG
+```{r}
+dag6 <- dagitty('dag {
+    PE [pos="0,1"]
+    HC [pos="1,1"]
+    D [pos="1,0"]
+    US [pos="0,0"]
+    PE -> HC
+    PE <- D -> HC
+    HC -> US
+}')
+plot(dag6)
+```
