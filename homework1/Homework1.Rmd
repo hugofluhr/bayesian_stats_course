@@ -1,16 +1,19 @@
 ---
-title: "R Notebook"
-output: html_notebook
+title: "Homework 1"
+author: "Hugo Fluhr"
+date: "Spring 2024"
+output: pdf_document
 ---
+**Note**: In all distribution plots the black curve is the correct estimate and the red one the incorrect estimate (hopefully).
 
-```{r}
-# Load required packages
+```{r include=FALSE}
+# Load packages
 library(rethinking)
 library(ggplot2)
 library(dagitty)
 ```
 # Problem 1
-### DAG
+## DAG
 ```{r}
 dag1 <- dagitty('dag {
     E [pos="0,1"]
@@ -23,22 +26,22 @@ dag1 <- dagitty('dag {
 }')
 plot(dag1)
 ```
-### Identifying the variables to control for to estimate the direct effect of E on WL
-```{r}
-adjustmentSets(dag1, exposure='E', outcome='WL', effect = 'total')
-```
-We need to adjust for CI to estimate the direct effect of E on WL. An incorrect model would be to adjust for M instead, this would give the total effect of E on WL.
 
-### Simulation
+## Identifying the variables to control for to estimate the direct effect of E on WL
+```{r}
+adjustmentSets(dag1, exposure='E', outcome='WL', effect = 'direct')
+```
+We need to adjust for CI to estimate the direct effect of E on WL, this close the path E -> CI -> WL. An incorrect model would be to adjust for M instead, this would give the total effect of E on WL.
+
+## Simulation
 ```{r}
 # Function to simulate data and fit models
-f1 <- function(n=100, bM_E=1, bM_CI=1, bE_CI=1, bCI_WL=1, bE_WL=1) {
+f1 <- function(n=100, bM_E=1, bM_CI=1, bE_CI=1, bCI_WL=1, bE_WL=1.5) {
   # Simulate data
   M <- rnorm(n)  # Motivation
-  u <- rnorm(n)  # Random noise
-  E <- rnorm(n, bM_E*M + u) # Regular Exercise
-  CI <- rnorm(n, bM_CI*M + bE_CI*E + u) # Caloric Intake
-  WL <- rnorm(n, bE_WL*E + bCI_WL*CI + u) # Weight loss
+  E <- rnorm(n, bM_E*M) # Regular Exercise
+  CI <- rnorm(n, bM_CI*M + bE_CI*E) # Caloric Intake
+  WL <- rnorm(n, bE_WL*E + bCI_WL*CI ) # Weight loss
   
   # Fit models
   b_direct <- coef(lm(WL ~ E + CI))['E']  # Model controlling for CI, direct effect
@@ -49,7 +52,8 @@ f1 <- function(n=100, bM_E=1, bM_CI=1, bE_CI=1, bCI_WL=1, bE_WL=1) {
 # Perform Monte Carlo simulation
 sim1 <- mcreplicate(1e4, f1(), mc.cores = 8)
 ```
-### Plotting the correct and incorrect versions of the estimate
+
+## Plotting the correct and incorrect versions of the estimate
 ```{r}
 # Plot posterior distributions
 range1 <- range(sim1[1,])
@@ -60,8 +64,10 @@ ylim <- c(0,3.)
 dens(sim1[1,], lwd=3, xlab='Coefficient of Exercise (Direct Effect)', xlim=xlim, ylim=ylim)
 dens(sim1[2,], lwd=3, col=2, add=TRUE, xlim=xlim, ylim=ylim)
 ```
+
 # Problem 2: Education Level and Job Satisfaction
-### DAG
+
+## DAG
 ```{r}
 dag2 <- dagitty('dag {
     EL [pos="0,1"]
@@ -74,33 +80,34 @@ dag2 <- dagitty('dag {
 }')
 plot(dag2)
 ```
-### Identifying the variables to control for to estimate the total effect of EL on JS
+
+## Identifying the variables to control for to estimate the total effect of EL on JS
 ```{r}
 adjustmentSets(dag2, exposure='EL', outcome='JS', effect = 'total')
 ```
-We need to adjust for both PE to estimate the total effect of EL on JS.
+We need to adjust for both PE to estimate the total effect of EL on JS, this closes a backdoor that would bias our estimate. The path through F is part of the total effect of EL on JS.
 
-### Simulation
+## Simulation
 ```{r}
 # Function to simulate data and fit models
 f2 <- function(n=100, bPE_EL=1, bPE_JS=1, bEL_F=1, bF_JS=1, bEL_JS=1) {
   # Simulate data
-  PE <- rnorm(n)  # Motivation
-  u <- rnorm(n)  # Random noise
-  EL <- rnorm(n, bPE_EL*PE + u) # Regular Exercise
-  F <- rnorm(n, bEL_F*EL + u) # Caloric Intake
-  JS <- rnorm(n, bF_JS*F + bEL_JS*EL + u) # Weight loss
+  PE <- rnorm(n)  # Prior Experience
+  EL <- rnorm(n, bPE_EL*PE ) # Education level
+  F <- rnorm(n, bEL_F*EL ) # Field
+  JS <- rnorm(n, bF_JS*F + bEL_JS*EL ) # Job Satisfaction
   
   # Fit models
-  b_total <- coef(lm(JS ~ EL + PE))['EL']  # Model controlling for F and PE
-  b_incorrect <- coef(lm(JS ~ EL))['EL']  # Model controlling for F only
+  b_total <- coef(lm(JS ~ EL + PE))['EL']  # Model controlling for PE (correct)
+  b_incorrect <- coef(lm(JS ~ EL + F))['EL']  # Model controlling for F (incorrect)
   
   return(c(b_total, b_incorrect))  # Return coefficients
 }
 # Perform Monte Carlo simulation
 sim2 <- mcreplicate(1e4, f2(), mc.cores = 8)
 ```
-### Plotting the correct and incorrect versions of the estimate
+
+## Plotting the correct and incorrect versions of the estimate
 ```{r}
 # Plot posterior distributions
 range1 <- range(sim2[1,])
@@ -112,8 +119,10 @@ dens(sim2[1,], lwd=3, xlab='Coefficient of Education Level (Total Effect)', xlim
 dens(sim2[2,], lwd=3, col=2, add=TRUE, xlim=xlim, ylim=ylim)
 ```
 
+
 # Problem 3: Medication Use and Patient Recovery Rate
-### DAG
+
+## DAG
 ```{r}
 dag3 <- dagitty('dag {
     M [pos="0,1"]
@@ -126,22 +135,22 @@ dag3 <- dagitty('dag {
 }')
 plot(dag3)
 ```
-### Identifying the variables to control for to estimate the direct effect of M on RR
+
+## Identifying the variables to control for to estimate the direct effect of M on RR
 ```{r}
 adjustmentSets(dag3, exposure='M', outcome='RR', effect = 'direct')
 ```
-We need to adjust for SI to estimate the direct effect of M on RR
+We need to adjust for SI to estimate the direct effect of M on RR as it closes a backdoor through SI. We do not need to control for A as it is independent of M.
 
-### Simulation
+## Simulation
 ```{r}
 # Function to simulate data and fit models
 f3 <- function(n=100, bA_SI=1, bA_RR=1, bSI_M=1, bSI_RR=1, bM_RR=1.5) {
   # Simulate data
   A <- rnorm(n)  # Age
-  u <- rnorm(n)  # Random noise
-  SI <- rnorm(n, bA_SI*A + u)
-  M <- rnorm(n, bSI_M + u)
-  RR <- rnorm(n, bA_RR*A + bSI_RR*SI + bM_RR*M + u)
+  SI <- rnorm(n, bA_SI*A)
+  M <- rnorm(n, bSI_M)
+  RR <- rnorm(n, bA_RR*A + bSI_RR*SI + bM_RR*M )
   
   # Fit models
   b_direct <- coef(lm(RR ~ M + SI))['M']  # Model controlling for SI
@@ -152,7 +161,8 @@ f3 <- function(n=100, bA_SI=1, bA_RR=1, bSI_M=1, bSI_RR=1, bM_RR=1.5) {
 # Perform Monte Carlo simulation
 sim3 <- mcreplicate(1e4, f3(), mc.cores = 8)
 ```
-### Plotting the correct and incorrect versions of the estimate
+
+## Plotting the correct and incorrect versions of the estimate
 ```{r}
 # Plot posterior distributions
 range1 <- range(sim3[1,])
@@ -164,8 +174,10 @@ dens(sim3[1,], lwd=3, xlab='Coefficient of Medication (Direct Effect)', xlim=xli
 dens(sim3[2,], lwd=3, col=2, add=TRUE, xlim=xlim, ylim=ylim)
 ```
 
+
 # Problem 4: Advertising and Sales
-### DAG
+
+## DAG
 ```{r}
 dag4 <- dagitty('dag {
     A [pos="0,1"]
@@ -176,18 +188,54 @@ dag4 <- dagitty('dag {
     A -> S
     B -> A
     B <- EC -> S
-    S <- Q -> B
+    S <- Q -> A
 }')
 plot(dag4)
 ```
-### Identifying the variables to control for to estimate the total effect of EL on JS
+
+## Identifying the variables to control for to estimate the total effect of Advertising on Sales
 ```{r}
 adjustmentSets(dag4, exposure='A', outcome='S', effect = 'total')
 ```
-We need to either adjust for both EC and Q or adjust for B to estimate the total effect of advertising on sales.
+We need to either adjust for both EC and Q or adjust for EC and B to estimate the total effect of advertising on sales. These adjustments close the backdoors through the path A<-B<-EC->S and the one through Q.
 
-# Problem 5
-### DAG
+## Simulation
+```{r}
+# Function to simulate data and fit models
+f4 <- function(n=100, bB_A=1., bQ_A=1., bQ_S=1., bEC_B=1., bEC_S=1., bA_S=2.) {
+  # Simulate data
+  Q <- rnorm(n)  # Quality of the product
+  EC <- rnorm(n) # Economic climate
+  B <- rnorm(n, bEC_B*EC )
+  A <- rnorm(n, bB_A*B + bQ_A*Q )
+  S <- rnorm(n, bQ_S*Q + bEC_S*EC + bA_S*A )
+    
+  # Fit models
+  b_total <- coef(lm(S ~ A + B + Q))['A']  # Model controlling for B and Q
+  b_incorrect <- coef(lm(S ~ A + B))['A']  # Model controlling for B only
+  
+  return(c(b_total, b_incorrect))  # Return coefficients
+}
+# Perform Monte Carlo simulation
+sim4 <- mcreplicate(1e4, f4(), mc.cores = 8)
+```
+
+## Plotting the correct and incorrect versions of the estimate
+```{r}
+# Plot posterior distributions
+range1 <- range(sim4[1,])
+range2 <- range(sim4[2,])
+xlim <- range(c(range1, range2))
+ylim <- c(0,8.2)
+
+dens(sim4[1,], lwd=3, xlab='Coefficient of Advertising (Total Effect)', xlim=xlim, ylim=ylim)
+dens(sim4[2,], lwd=3, col=2, add=TRUE, xlim=xlim, ylim=ylim)
+```
+
+
+# Problem 5
+
+## DAG
 ```{r}
 dag5 <- dagitty('dag {
     SM [pos="0,1"]
@@ -200,19 +248,93 @@ dag5 <- dagitty('dag {
 }')
 plot(dag5)
 ```
-OSN is a fork
 
-# Problem 6
-### DAG
+## Identifying the variables to control for to estimate the direct effect of Social Media use on Mental Health
+```{r}
+adjustmentSets(dag5, exposure='SM', outcome='MH', effect = 'direct')
+```
+We need to adjust for Offline Social Network to estimate the direct effect of Social Media use on Mental Health. This closes the backdoor through OSN.
+## Simulation
+```{r}
+# Function to simulate data and fit models
+f5 <- function(n=100, bPI_SM = 1, bOSN_SM = 1, bOSN_MH = 1, bSM_MH = 2) {
+  # Simulate data
+  PI <- rnorm(n)  # Personal Interest
+  OSN <- rnorm(n) # Offline Social Network
+  SM <- rnorm(n, bPI_SM*PI )
+  MH <- rnorm(n, bOSN_MH*OSN + bSM_MH*SM )
+    
+  # Fit models
+  b_direct <- coef(lm(MH ~ SM + OSN))['SM']  # Model controlling for OSN
+  b_incorrect <- coef(lm(MH ~ SM + PI))['SM']  # Model not controlling for OSN but PI instead
+  
+  return(c(b_direct, b_incorrect))  # Return coefficients
+}
+# Perform Monte Carlo simulation
+sim5 <- mcreplicate(1e4, f5(), mc.cores = 8)
+```
+
+## Plotting the correct and incorrect versions of the estimate
+```{r}
+# Plot posterior distributions
+range1 <- range(sim5[1,])
+range2 <- range(sim5[2,])
+xlim <- range(c(range1, range2))
+ylim <- c(0,5.5)
+
+dens(sim5[1,], lwd=3, xlab='Coefficient of Social Media use (Direct Effect)', xlim=xlim, ylim=ylim)
+dens(sim5[2,], lwd=3, col=2, add=TRUE, xlim=xlim, ylim=ylim)
+```
+
+# Problem 6
+
+## DAG
 ```{r}
 dag6 <- dagitty('dag {
     PE [pos="0,1"]
     HC [pos="1,1"]
-    D [pos="1,0"]
-    US [pos="0,0"]
+    D [pos="0,0"]
+    US [pos="1, 0"]
     PE -> HC
     PE <- D -> HC
     HC -> US
 }')
 plot(dag6)
+```
+
+## Identifying the variables to control for to estimate the direct effect of Pesticide Exposure on Health Condition
+```{r}
+adjustmentSets(dag6, exposure='PE', outcome='HC', effect = 'direct')
+```
+We need to either adjust for Dietary Habits to estimate the direct effect of Pesticide Exposure on Health Condition, getting rid of the backdoor through D. US does not need to be included in the model.
+
+## Simulation
+```{r}
+# Function to simulate data and fit models
+f6 <- function(n=100, bD_PE = 1, bD_HC = 1, bPE_HC = 1.5) {
+  # Simulate data
+  D <- rnorm(n)  # Dietary Habits
+  PE <- rnorm(n, bD_PE*D )
+  HC <- rnorm(n, bD_HC*D + bPE_HC*PE )
+      
+  # Fit models
+  b_direct <- coef(lm(HC ~ PE + D))['PE']  # Model controlling for D
+  b_incorrect <- coef(lm(HC ~ PE))['PE']  # Model not controlling for D
+  
+  return(c(b_direct, b_incorrect))  # Return coefficients
+}
+# Perform Monte Carlo simulation
+sim6 <- mcreplicate(1e4, f6(), mc.cores = 8)
+```
+
+## Plotting the correct and incorrect versions of the estimate
+```{r}
+# Plot posterior distributions
+range1 <- range(sim6[1,])
+range2 <- range(sim6[2,])
+xlim <- range(c(range1, range2))
+ylim <- c(0,5.6)
+
+dens(sim6[1,], lwd=3, xlab='Coefficient of Pesticide Exposure (Direct Effect)', xlim=xlim, ylim=ylim)
+dens(sim6[2,], lwd=3, col=2, add=TRUE, xlim=xlim, ylim=ylim)
 ```
